@@ -20,7 +20,7 @@
                 "data_loader.train.batch_size=1",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0",
+                "CUDA_VISIBLE_DEVICES": "6",
             }
         },
         {
@@ -41,7 +41,7 @@
                 "checkpointing.load=checkpoints/re10k.ckpt",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0",
+                "CUDA_VISIBLE_DEVICES": "6",
             }
         },
         {
@@ -57,7 +57,7 @@
                 "data_loader.val.num_workers=0",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0",
+                "CUDA_VISIBLE_DEVICES": "6",
             }
         },
         {
@@ -69,7 +69,7 @@
             "justMyCode": true,
             "args": [],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0",
+                "CUDA_VISIBLE_DEVICES": "6",
             }
         },
         {
@@ -85,7 +85,7 @@
                 "data_loader.val.num_workers=0",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0",
+                "CUDA_VISIBLE_DEVICES": "6",
             }
         },
         {
@@ -100,7 +100,7 @@
                 "+evaluation=re10k_video",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0",
+                "CUDA_VISIBLE_DEVICES": "6",
             }
         },
         {
