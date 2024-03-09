@@ -47,6 +47,8 @@ def train(cfg_dict: DictConfig):
     )
     print(cyan(f"Saving outputs to {output_dir}."))
     latest_run = output_dir.parents[1] / "latest-run"
+    # 每个版本刚跑完会存一个时间版本和一个latest版本，这里是删除latest版本，因此之前跑的版本
+    # 会保存为时间格式
     os.system(f"rm {latest_run}")
     os.system(f"ln -s {output_dir} {latest_run}")
 
@@ -80,11 +82,13 @@ def train(cfg_dict: DictConfig):
     )
 
     # Prepare the checkpoint for loading.
+    # 检查点文件夹保存路径，如果使用了wandb需要额外配置wandb前缀否则就默认返还指定的命名格式
     checkpoint_path = update_checkpoint_path(cfg.checkpointing.load, cfg.wandb)
 
     # This allows the current step to be shared with the data loader processes.
     step_tracker = StepTracker()
 
+    # 一个用来配置如何使用data和model训练的执行组件
     trainer = Trainer(
         max_epochs=-1,
         accelerator="gpu",
@@ -103,8 +107,10 @@ def train(cfg_dict: DictConfig):
     )
     torch.manual_seed(cfg_dict.seed + trainer.global_rank)
 
+    # 立体几何编码，参考原文是对图片->包含立体几何距离的特征图编码->深度预测等
     encoder, encoder_visualizer = get_encoder(cfg.model.encoder)
 
+    # 设置模型，主要是特征图采样点->guassians属性的网络
     model_wrapper = ModelWrapper(
         cfg.optimizer,
         cfg.test,

@@ -66,9 +66,11 @@ class EpipolarSampler(nn.Module):
 
         # Select the camera extrinsics and intrinsics to project onto. For each context
         # view, this means all other context views in the batch.
+        # onto表示on the others 到另一个xxx
         projection = project_rays(
             rearrange(origins, "b v r xyz -> b v () r xyz"),
             rearrange(directions, "b v r xyz -> b v () r xyz"),
+            # 存储成每一个视图下其他视图的内参与外参格式
             rearrange(self.collect(extrinsics), "b v ov i j -> b v ov () i j"),
             rearrange(self.collect(intrinsics), "b v ov i j -> b v ov () i j"),
             rearrange(near, "b v -> b v () ()"),
@@ -143,6 +145,7 @@ class EpipolarSampler(nn.Module):
             rearrange(extrinsics, "b v i j -> b v () i j"),
             rearrange(intrinsics, "b v i j -> b v () i j"),
         )
+        # 这里最终返还还是xy虽然相同但是每一个view对应一个，以及相机世界坐标和射线世界坐标方向向量
         return repeat(xy, "h w xy -> b v (h w) xy", b=b, v=v), origins, directions
 
     def transpose(

@@ -37,6 +37,8 @@ class DistributionSampler:
         expected input/output shapes since jaxtyping doesn't support multiple variadic
         lengths in annotations.
         """
+        # ndim就是获取当前index有几个维度，是一个标量，这里bucket_dim是最后一个维度对应维度索
+        # 引为4，这里是方便后面进行赋值操作
         bucket_dim = index.ndim - 1
         while len(index.shape) < len(target.shape):
             index = index[..., None]

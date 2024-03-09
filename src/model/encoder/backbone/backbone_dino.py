@@ -47,6 +47,7 @@ class BackboneDino(Backbone[BackboneDinoCfg]):
 
         # Compute features from the DINO-pretrained ViT.
         b, v, _, h, w = context["image"].shape
+        # 这里需要保证patch块可以整数划分
         assert h % self.patch_size == 0 and w % self.patch_size == 0
         tokens = rearrange(context["image"], "b v c h w -> (b v) c h w")
         tokens = self.dino.get_intermediate_layers(tokens)[0]

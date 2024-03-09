@@ -66,7 +66,7 @@ class TrajectoryFn(Protocol):
     ]:
         pass
 
-
+# 继承的是plmodule，因此需要额外按照文档要求实现一些hooks
 class ModelWrapper(LightningModule):
     logger: Optional[WandbLogger]
     encoder: nn.Module
@@ -153,7 +153,7 @@ class ModelWrapper(LightningModule):
 
     def test_step(self, batch, batch_idx):
         batch: BatchedExample = self.data_shim(batch)
-
+        # batch_size，视角个数，rgb,h,w
         b, v, _, h, w = batch["target"]["image"].shape
         assert b == 1
         if batch_idx % 100 == 0:

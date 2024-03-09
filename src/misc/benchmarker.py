@@ -7,7 +7,7 @@ from time import time
 import numpy as np
 import torch
 
-
+# 性能评估工具，包括训练速度，内存消耗等指标
 class Benchmarker:
     def __init__(self):
         self.execution_times = defaultdict(list)

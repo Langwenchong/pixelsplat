@@ -64,10 +64,13 @@ def _intersect_image_coordinate(
     """
 
     # Define shorthands.
+    # 注意求解的是当前光线与图像平面边界x,y轴的交点，并且x,y是图像坐标系下的值因此对应图像边界
     dim = "xy".index(dimension)
     other_dim = 1 - dim
+    # 取出fx,fy，这里用fs,fo表示
     fs = intrinsics[..., dim, dim]  # focal length, same coordinate
     fo = intrinsics[..., other_dim, other_dim]  # focal length, other coordinate
+    # 同上，注意这里是一次性求得每一个视角在其他视角中的焦距，原点，方向(在其他视角坐标系）等信息
     cs = intrinsics[..., dim, 2]  # principal point, same coordinate
     co = intrinsics[..., other_dim, 2]  # principal point, other coordinate
     os = origins[..., dim]  # ray origin, same coordinate
@@ -76,6 +79,13 @@ def _intersect_image_coordinate(
     do = directions[..., other_dim]  # ray direction, other coordinate
     oz = origins[..., 2]  # ray origin, z coordinate
     dz = directions[..., 2]  # ray direction, z coordinate
+    # 这段代码是在计算相机坐标系下的归一化坐标(就是以焦距长度为单位长度)。
+    # 在相机坐标系下，通常会将坐标进行归一化处理，以便
+    # 于后续的计算和处理。这种归一化坐标的目的是将图像坐标映射到一个单位平面上，方便进行相机几何
+    # 的分析和计算。通过 (coordinate_value - cs) / fs 的计算，实际上是将图像坐标先减去主点坐标
+    # ，然后再除以焦距，从而得到相机坐标系下的归一化坐标。这样得到的归一化坐标会使得相机坐标系中
+    # 的中心点对应的坐标为原点，而焦点对应的坐标则为单位向量。这样处理之后，可以更方便地进行相机
+    # 几何的计算。此时焦点坐标为(0,0,1)。之所以不是焦点为原点是因为后面要以画幅中心为原点求投影。
     c = (coordinate_value - cs) / fs  # coefficient (computed once and factored out)
 
     # Compute the value of t at the intersection.
@@ -164,9 +174,11 @@ def project_rays(
     epsilon: float = 1e-6,
 ) -> RaySegmentProjection:
     # Transform the rays into camera space.
+    # 注意这里的外参是其他视角的外参，因此这里是将各自试图自己的原点转换到别的视角相机坐标系下
     world_to_cam = torch.linalg.inv(extrinsics)
     origins = homogenize_points(origins)
     origins = einsum(world_to_cam, origins, "... i j, ... j -> ... i")
+    # 方向也是
     directions = homogenize_vectors(directions)
     directions = einsum(world_to_cam, directions, "... i j, ... j -> ... i")
     origins = origins[..., :3]

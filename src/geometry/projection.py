@@ -79,6 +79,11 @@ def unproject(
     """Unproject 2D camera coordinates with the given Z values."""
 
     # Apply the inverse intrinsics to the coordinates.
+    # 转为齐次坐标，注意这里的coordinates是[h*w,3]并不包含视图数量v维度，因为这里将图片处理为了
+    # 统一的分辨率，因此每一个视图他的图像坐标相同，只需要处理一次
+    # 接下来根据不同v的相机内参生成每一个相机自己坐标系中的射线，这里允许相机规格不同
+    # 注意此时的z得到的并不是反投影的深度信息，这个向量表示的是方向不是相机坐标系中的某个点
+    # 具体的深度信息还需要进一步通过这个反投影的方向射线去立体匹配求点获得
     coordinates = homogenize_points(coordinates)
     ray_directions = einsum(
         intrinsics.inverse(), coordinates, "... i j, ... j -> ... i"
@@ -99,16 +104,22 @@ def get_world_rays(
     # Get camera-space ray directions.
     directions = unproject(
         coordinates,
+        # 传递射线的z方向坐标，注意这里认为相机面向的方向是z轴正方向
         torch.ones_like(coordinates[..., 0]),
         intrinsics,
     )
+    # 注意要归一化，由于是透视投影而非正交投影，因此方向向量并不是平行的是有一定的角度差的
     directions = directions / directions.norm(dim=-1, keepdim=True)
 
     # Transform ray directions to world coordinates.
+    # 转齐次坐标，注意向量里w为0
     directions = homogenize_vectors(directions)
+    # 这里并不取最后一个维度，因为齐次向量w=0，处理完成后继续使用三维非齐次坐标表示
+    # 这里是将相机坐标系下的光线向量进一步转换到世界坐标系
     directions = transform_cam2world(directions, extrinsics)[..., :-1]
 
     # Tile the ray origins to have the same shape as the ray directions.
+    # 返还原点相机坐标，这里是进一步将origins复制为于directions相同维度
     origins = extrinsics[..., :-1, -1].broadcast_to(directions.shape)
 
     return origins, directions
@@ -125,15 +136,20 @@ def sample_image_grid(
 
     # Each entry is a pixel-wise integer coordinate. In the 2D case, each entry is a
     # (row, col) coordinate.
+    # indices只是横轴纵轴分别罗列索引，是两个整数列表
     indices = [torch.arange(length, device=device) for length in shape]
+    # 这里构架一个索引矩阵，每一个值/像素对应一个二维索引坐标，行优先
     stacked_indices = torch.stack(torch.meshgrid(*indices, indexing="ij"), dim=-1)
 
+    # 这里是将范围缩放至[0,1]范围
     # Each entry is a floating-point coordinate in the range (0, 1). In the 2D case,
     # each entry is an (x, y) coordinate.
     coordinates = [(idx + 0.5) / length for idx, length in zip(indices, shape)]
+    # 这里转置为列优先
     coordinates = reversed(coordinates)
     coordinates = torch.stack(torch.meshgrid(*coordinates, indexing="xy"), dim=-1)
 
+    # 这里先返还[0,1]范围的，再返还未缩放的
     return coordinates, stacked_indices
 
 

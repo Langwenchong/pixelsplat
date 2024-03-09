@@ -86,6 +86,8 @@ class DatasetRE10k(IterableDataset):
 
         for chunk_path in self.chunks:
             # Load the chunk.
+            # chunk中包含每一段视频的属性：timestamps裁剪时间戳，images帧，cameras相机参数
+            # key视频id,url视频来源等
             chunk = torch.load(chunk_path)
 
             if self.cfg.overfit_to_scene is not None:
@@ -101,6 +103,8 @@ class DatasetRE10k(IterableDataset):
                 scene = example["key"]
 
                 try:
+                    # 虽然是视频，但是对于场景来说每一帧就是一个不同的视角，这里随机选取帧
+                    # 即随机抽取几个不同的视角，其中还要抽取几个当作target_views
                     context_indices, target_indices = self.view_sampler.sample(
                         scene,
                         extrinsics,
@@ -111,6 +115,7 @@ class DatasetRE10k(IterableDataset):
                     continue
 
                 # Skip the example if the field of view is too wide.
+                # fov过大时有畸变则跳过此次重建
                 if (get_fov(intrinsics).rad2deg() > self.cfg.max_fov).any():
                     continue
 
@@ -136,9 +141,13 @@ class DatasetRE10k(IterableDataset):
                     continue
 
                 # Resize the world to make the baseline 1.
+                # 这段代码的作用是调整世界的尺度，使得基线（baseline）的长度变为1。基线是指
+                # 在双目或多目相机系统中两个相机之间的距离，通常用来计算深度信息。
                 context_extrinsics = extrinsics[context_indices]
                 if context_extrinsics.shape[0] == 2 and self.cfg.make_baseline_1:
                     a, b = context_extrinsics[:, :3, 3]
+                    # 其实就是两个相机的世界坐标系下的位置向量
+                    # 相减后归一化得到距离长度
                     scale = (a - b).norm()
                     if scale < self.cfg.baseline_epsilon:
                         print(
@@ -163,6 +172,7 @@ class DatasetRE10k(IterableDataset):
                         "extrinsics": extrinsics[target_indices],
                         "intrinsics": intrinsics[target_indices],
                         "image": target_images,
+                        # 因此之前的near,far的距离重新按照相机之间的距离为1定义
                         "near": self.get_bound("near", len(target_indices)) / scale,
                         "far": self.get_bound("far", len(target_indices)) / scale,
                         "index": target_indices,
@@ -171,6 +181,7 @@ class DatasetRE10k(IterableDataset):
                 }
                 if self.stage == "train" and self.cfg.augment:
                     example = apply_augmentation_shim(example)
+                # 都需要进行形状裁剪处理，yield返还处理过的example
                 yield apply_crop_shim(example, tuple(self.cfg.image_shape))
 
     def convert_poses(
@@ -181,7 +192,7 @@ class DatasetRE10k(IterableDataset):
         Float[Tensor, "batch 3 3"],  # intrinsics
     ]:
         b, _ = poses.shape
-
+        # 前4个数是相机内参包括焦距，uv中心等，后12个数是外参，而[4:6]猜测可能是矫正系数
         # Convert the intrinsics to a 3x3 normalized K matrix.
         intrinsics = torch.eye(3, dtype=torch.float32)
         intrinsics = repeat(intrinsics, "h w -> b h w", b=b).clone()

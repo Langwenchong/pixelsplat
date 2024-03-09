@@ -44,6 +44,7 @@ class EpipolarTransformer(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.epipolar_sampler = EpipolarSampler(
+            # 注意这里的config是EpipolarTransformerCfg,而get_cfg()返还的是全局config
             get_cfg().dataset.view_sampler.num_context_views,
             cfg.num_samples,
         )

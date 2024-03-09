@@ -20,7 +20,7 @@
                 "data_loader.train.batch_size=1",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "6",
+                "CUDA_VISIBLE_DEVICES": "1",
             }
         },
         {
@@ -35,13 +35,14 @@
                 "data_loader.train.num_workers=0",
                 "data_loader.test.num_workers=0",
                 "data_loader.val.num_workers=0",
+                // 这里的加号是因为如果在main.yaml默认覆盖新选项中没有找到这个匹配项则会新添
                 "+experiment=re10k",
                 "mode=test",
                 "dataset/view_sampler=evaluation",
                 "checkpointing.load=checkpoints/re10k.ckpt",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "6",
+                "CUDA_VISIBLE_DEVICES": "1",
             }
         },
         {
@@ -57,7 +58,7 @@
                 "data_loader.val.num_workers=0",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "6",
+                "CUDA_VISIBLE_DEVICES": "1",
             }
         },
         {
@@ -69,7 +70,7 @@
             "justMyCode": true,
             "args": [],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "6",
+                "CUDA_VISIBLE_DEVICES": "1",
             }
         },
         {
@@ -85,7 +86,7 @@
                 "data_loader.val.num_workers=0",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "6",
+                "CUDA_VISIBLE_DEVICES": "1",
             }
         },
         {
@@ -100,7 +101,7 @@
                 "+evaluation=re10k_video",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "6",
+                "CUDA_VISIBLE_DEVICES": "1",
             }
         },
         {
