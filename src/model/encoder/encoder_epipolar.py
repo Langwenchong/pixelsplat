@@ -135,7 +135,7 @@ class EncoderEpipolar(Encoder[EncoderEpipolarCfg]):
                 context["far"],
             )
 
-        # Add the high-resolution skip connection.
+        # Add the high-resolution skip connection.其实就是加上原图片的像素,注意都是相加而不是拼接channel
         skip = rearrange(context["image"], "b v c h w -> (b v) c h w")
         skip = self.high_resolution_skip(skip)
         features = features + rearrange(skip, "(b v) c h w -> b v c h w", b=b, v=v)
@@ -158,6 +158,7 @@ class EncoderEpipolar(Encoder[EncoderEpipolarCfg]):
             "... (srf c) -> ... srf c",
             srf=self.cfg.num_surfaces,
         )
+        # 预测每一个像素中gaussian的偏移，注意还是默认取值范围在[0,1]
         offset_xy = gaussians[..., :2].sigmoid()
         pixel_size = 1 / torch.tensor((w, h), dtype=torch.float32, device=device)
         xy_ray = xy_ray + (offset_xy - 0.5) * pixel_size
@@ -167,6 +168,8 @@ class EncoderEpipolar(Encoder[EncoderEpipolarCfg]):
             rearrange(context["intrinsics"], "b v i j -> b v () () () i j"),
             rearrange(xy_ray, "b v r srf xy -> b v r srf () xy"),
             depths,
+            # 从这里也可以看出虽然每一个pixel的gaussian可能反投影为多个，但是其实这几个gaussian
+            # 的rotation,scale是一样根据同一个特征预测的，只是透明度和深度单独预测
             self.map_pdf_to_opacity(densities, global_step) / gpp,
             rearrange(gaussians[..., 2:], "b v r srf c -> b v r srf () c"),
             (h, w),
@@ -194,6 +197,7 @@ class EncoderEpipolar(Encoder[EncoderEpipolarCfg]):
         )
 
         return Gaussians(
+            # spp - gaussians per pixel
             rearrange(
                 gaussians.means,
                 "b v r srf spp xyz -> b (v r srf spp) xyz",

@@ -50,7 +50,7 @@ class DepthPredictorMonocular(nn.Module):
         # Convert the features into a depth distribution plus intra-bucket offsets.
         features = self.projection(features)
         # 因此这里是整合每一个像素的通道feature并按照num_samples划分depth buckest数量以及srf
-        # 表示要拆分成几个视图，由于是2视图因此拆分成2部分，其中取前一部分为pdf预测特征图，后一
+        # 表示要拆分成几个视图，由于又两部分预测因此这里拆成两部分，其中取前一部分为pdf预测特征图，后一
         # 部分用于buckets中心偏移量的预测
         pdf_raw, offset_raw = rearrange(
             features, "... (dpt srf c) -> c ... srf dpt", c=2, srf=self.num_surfaces
@@ -84,6 +84,7 @@ class DepthPredictorMonocular(nn.Module):
             opacity = pdf / (1 - partial + 1e-10)
             opacity = self.sampler.gather(index, opacity)
         else:
+            # 参考原文，直接使用采样概率作为gaussian的α值
             opacity = pdf_i
 
         return depth, opacity

@@ -103,6 +103,9 @@ def _intersect_image_coordinate(
     xy = [coordinate_same]
     xy.insert(other_dim, coordinate_other)
     xy = torch.stack(xy, dim=-1)
+    # 注意这里的xy是平面坐标系的，正确的取值范围应该是[0,1]
+    # t表示从当前射线起点即相机坐标延伸到视角2平面下当前三维交点投影点的尺度，因此应该是整数，
+    # 因为相机的采样射线不可能反向传播
     xyz = origins + t[..., None] * directions
 
     # These will all have exactly the same batch shape (no broadcasting necessary). In
@@ -118,6 +121,7 @@ def _compare_projections(
     intersections: Iterable[PointProjection],
     reduction: Literal["min", "max"],
 ) -> PointProjection:
+    # 注意都是交点，表示的是射线投影到图像指定边界轴的交点
     intersections = {k: v.clone() for k, v in default_collate(intersections).items()}
     t = intersections["t"]
     xy = intersections["xy"]
@@ -130,7 +134,9 @@ def _compare_projections(
     }[reduction]
     t[~valid] = lowest_priority
 
-    # Run the reduction (either t.min() or t.max()).
+    # Run the reduction (either t.min() or t.max()).、
+    # 提取每一个射线与平面四个轴边界延申面交点中最小的值以及对应的索引值，此交点合法为最终交点
+    # 注意如果当前这个射线确实有投影，则交点必定取值范围有[0,1]的值，反之则为inf
     reduced, selector = getattr(t, reduction)(dim=0)
 
     # Index the results.
@@ -146,6 +152,7 @@ def _compute_point_projection(
     t: Float[Tensor, "*#batch"],
     intrinsics: Float[Tensor, "*#batch 3 3"],
 ) -> PointProjection:
+    # 这里就是相机坐标系的点进一步投影到图像平面坐标系
     xy = project_camera_space(xyz, intrinsics)
     return {
         "t": t,
@@ -191,6 +198,8 @@ def project_rays(
         _intersect_image_coordinate(intrinsics, origins, directions, "y", 0.0),
         _intersect_image_coordinate(intrinsics, origins, directions, "y", 1.0),
     )
+    # 这里按照t小的选其实就是在选择投影线段的起点位置，注意可能有的也为false就是投影不到
+    # 因此这里tmin为false即起点非法的时候tmax终点也会对应为false,即当前射线无法投影到图像平面
     frame_intersection_min = _compare_projections(frame_intersections, "min")
     frame_intersection_max = _compare_projections(frame_intersections, "max")
 
@@ -247,17 +256,30 @@ def project_rays(
         "xy_max": torch.empty_like(projection_at_infinity["xy"]),
         "overlaps_image": torch.empty_like(projection_at_zero["valid"]),
     }
-
+    # 这里的itertools.product就是对于每一个相机near的两种投影情况与far两种情况的排列组合，4次循环
     for min_valid, max_valid in itertools.product([True, False], [True, False]):
+        # 两者都为True时为0否则为False 过程分别为[T,T],[T,F],[F,T],[F,F]
+        # 第一次时min_valid==max_valid==True因此是将合法的投影点mask设置为1
         min_mask = projection_at_zero["valid"] ^ (not min_valid)
         max_mask = projection_at_infinity["valid"] ^ (not max_valid)
+        # 只有都合法时才为True，此时后面的result赋值才会赋值否则过滤掉次操作，说明是根据四种不同情况进行
+        # 其实这里mask一共四种情况生成为True也就结合生成了四种不同的投影情况，后面赋值就是这四种情况赋值
+        # 因此这里mask表示只针对当前所指定的情况进行探讨和赋值
         mask = min_mask & max_mask
+        # 注意此时是假设min_valid合法，是我们手动设置的值，因此第一轮选区的一定都是近点合法的值
+        # 当近处都合法时则最小的投影点xy在射线近点处产生否则就是计算的最近交点，远点同理，其实就类比与估计深度预设值D采样不同的视图2像素位置
         min_value = projection_at_zero if min_valid else frame_intersection_min
         max_value = projection_at_infinity if max_valid else frame_intersection_max
         result["t_min"][mask] = min_value["t"][mask]
         result["t_max"][mask] = max_value["t"][mask]
         result["xy_min"][mask] = min_value["xy"][mask]
         result["xy_max"][mask] = max_value["xy"][mask]
+        # 第一轮是对所有的近远点投影都合法在视角2图像的情况点进行赋值(注意这轮保证赋值的合法)
+        # 之后第二轮就是近点合法远点不合法的情况则远点使用远交点代替，但是注意此时远交点仍然可能不合法
+        # 第三轮就是近点不合法远点合法的情况则近点使用近交点代替，注意此时近交点也可能不合法
+        # 第四轮就是近远点都不合法，则都是用交点代替，此时注意也可能为不合法的
+        # 因此上面赋值完有些点组成的投影切割段仍可能不合法，因此下面用来进一步筛选
+        # 只有当前选取的组成投影线段的两点都合法才能说明当前这段射线切割线可以最终投影到视角2图像
         result["overlaps_image"][mask] = (min_value["valid"] & max_value["valid"])[mask]
 
     return result
@@ -284,7 +306,7 @@ def lift_to_3d(
     epipolar lines defined by the origins and directions. The extrinsics and intrinsics
     are for the images the 2D points lie on.
     """
-
+    # 根据当前的采样点二维坐标反投影射线与views的directions求交点，这里使用了一个求交点算法
     xy_origins, xy_directions = get_world_rays(xy, extrinsics, intrinsics)
     return intersect_rays(origins, directions, xy_origins, xy_directions)
 
@@ -300,5 +322,8 @@ def get_depth(
     lines defined by the origins and directions. The extrinsics and intrinsics are for
     the images the 2D points lie on.
     """
+    # 得到other views中投影的极线上匹配的采样点的3d坐标
     xyz = lift_to_3d(origins, directions, xy, extrinsics, intrinsics)
+    # 这里直接相减即可因为lift_to_3d实际上是反投影other views射线与views射线求交点得到的
+    # 因此这个点与origins在一条逆深度射线上直接相减得到z就是深度，这里归一化是为了界定深度为[0,1]
     return (xyz - origins).norm(dim=-1)

@@ -50,6 +50,7 @@ class EpipolarTransformer(nn.Module):
         )
         if self.cfg.num_octaves > 0:
             self.depth_encoding = nn.Sequential(
+                # 多尺度采样编码金字塔层数，因此如果部位0则说明要进行采样点深度距离的编码
                 (pe := PositionalEncoding(cfg.num_octaves)),
                 nn.Linear(pe.d_out(1), d_in),
             )
@@ -110,6 +111,7 @@ class EpipolarTransformer(nn.Module):
             # are extremely close together (or possibly oriented the same way).
             depths = depths.maximum(near[..., None, None, None])
             depths = depths.minimum(far[..., None, None, None])
+            # 注意这里并不是直接采用均匀分布的深度值，而是相对时差更合理
             depths = depth_to_relative_disparity(
                 depths,
                 rearrange(near, "b v -> b v () () ()"),
@@ -120,7 +122,7 @@ class EpipolarTransformer(nn.Module):
         else:
             q = sampling.features
 
-        # Run the transformer.
+        # Run the transformer.注意这里是将所有视图的自身feature以及采样feature等一起交叉注意
         kv = rearrange(features, "b v c h w -> (b v h w) () c")
         features = self.transformer.forward(
             kv,

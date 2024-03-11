@@ -25,6 +25,7 @@ def rotate_sh(
             sh_coefficients[..., degree**2 : (degree + 1) ** 2],
             "... i j, ... j -> ... i",
         )
+        # 存储的是每一阶的sh系数旋转后的值
         result.append(sh_rotated)
 
     return torch.cat(result, dim=-1)

@@ -57,9 +57,10 @@ class GaussianAdapter(nn.Module):
         eps: float = 1e-8,
     ) -> Gaussians:
         device = extrinsics.device
+        # 注意这里的拆分，可以看到sh是25个系数，因此这里的阶数n=4是从0开始的，*3是因为rgb三个通道数
         scales, rotations, sh = raw_gaussians.split((3, 4, 3 * self.d_sh), dim=-1)
 
-        # Map scale features to valid scale range.
+        # Map scale features to valid scale range.这里貌似界定了gaussina大小保证在像素内
         scale_min = self.cfg.gaussian_scale_min
         scale_max = self.cfg.gaussian_scale_max
         scales = scale_min + (scale_max - scale_min) * scales.sigmoid()
@@ -78,6 +79,9 @@ class GaussianAdapter(nn.Module):
         # Create world-space covariance matrices.
         covariances = build_covariance(scales, rotations)
         c2w_rotations = extrinsics[..., :3, :3]
+        # 他这里表述理解可能和咱们不太一样，相机外参的旋转矩阵是把相机放到世界坐标原点的矩阵
+        # (w2c)的逆矩阵，因此他认为这个相机外参旋转矩阵是c2w，注意转换时还要保证正定对称，因此
+        # 两边都要乘上，其实相当于对（RSS^TR^T)的每一项RS和R^TS^T分别乘上旋转转换到世界坐标系
         covariances = c2w_rotations @ covariances @ c2w_rotations.transpose(-1, -2)
 
         # Compute Gaussian means.

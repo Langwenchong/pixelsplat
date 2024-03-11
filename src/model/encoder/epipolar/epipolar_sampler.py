@@ -81,6 +81,7 @@ class EpipolarSampler(nn.Module):
         # Generate sample points.
         s = self.num_samples
         sample_depth = (torch.arange(s, device=device) + 0.5) / s
+        # 将s维设置为s*k维，其中k自适应计算，因此为1，所以变成了s*1张量了，这里是采样投影匹配点
         sample_depth = rearrange(sample_depth, "s -> s ()")
         xy_min = projection["xy_min"].nan_to_num(posinf=0, neginf=0) 
         xy_min = xy_min * projection["overlaps_image"][..., None]
@@ -88,6 +89,8 @@ class EpipolarSampler(nn.Module):
         xy_max = projection["xy_max"].nan_to_num(posinf=0, neginf=0) 
         xy_max = xy_max * projection["overlaps_image"][..., None]
         xy_max = rearrange(xy_max, "b v ov r xy -> b v ov r () xy")
+        # 上面将所有不合法的像素逆深度射线上额采样点近/远坐标都设置为了零，因此这里的xy_sample
+        # 的值在不合法处的坐标值都是[0,0]，统一按照[0,0]位置采样值
         xy_sample = xy_min + sample_depth * (xy_max - xy_min)
 
         # The samples' shape is (batch, view, other_view, ...). However, before the
@@ -97,10 +100,17 @@ class EpipolarSampler(nn.Module):
         # drawn. If the diagonal weren't removed for efficiency, this would be a literal
         # transpose. In our case, it's as if the diagonal were re-added, the transpose
         # were taken, and the diagonal were then removed again.
+        # 注意之前的[1,2,1,...]中的1表示other views，而现在转置了因此表示自己的view了这是为了
+        # 方便采样匹配点，即现在后面的值表示当前view需要采样的点以提供给另一个视图去匹配计算代价
         samples = self.transpose(xy_sample)
+        # 这里是真正的采样环节，但是由于投影点未必在像素的中心，因此需要使用线性插值，这里为了
+        # 调用api需要更改为指定格式
         samples = F.grid_sample(
+            # 注意这里的image不是三通道的，而是已经经过feature提取后的了128通道了
             rearrange(images, "b v c h w -> (b v) c h w"),
+            # 首先将采样样本取值范围更改为了[-1,1]，同时调整维度
             rearrange(2 * samples - 1, "b v ov r s xy -> (b v) (ov r s) () xy"),
+            # 双线性插值
             mode="bilinear",
             padding_mode="zeros",
             align_corners=False,
@@ -108,19 +118,30 @@ class EpipolarSampler(nn.Module):
         samples = rearrange(
             samples, "(b v) c (ov r s) () -> b v ov r s c", b=b, v=v, ov=v - 1, s=s
         )
+        # 注意这里又转换回去了，因此[1,2,1,...]中的1表示其他视图，因此每一个[1,2,...]存储的是
+        # 其他各个视角采样来的匹配点feature
         samples = self.transpose(samples)
 
         # Zero out invalid samples.
+        # [0,0]处的采样值表示在原点处也会采样一个feature值因此不合法的采样点也需要进一步赋值为0
         samples = samples * projection["overlaps_image"][..., None, None]
 
         half_span = 0.5 / s
         return EpipolarSampling(
+            # 这里返还采样特征，即每一个视角在other views中投影极线上的s个采样点(坐标表示是图像
+            # 坐标系下的二维坐标值)
             features=samples,
+            # 表示当前view下哪些像素的逆深度采样射线有效合法，不合法即说明当前view下该逆深度射线
+            # 在某个other view下的投影线不再图像上
             valid=projection["overlaps_image"],
+            # 当前view每一个像素的位置坐标
             xy_ray=xy_ray,
+            # 采样坐标
             xy_sample=xy_sample,
+            # 采样坐标的起点和终点
             xy_sample_near=xy_min + (sample_depth - half_span) * (xy_max - xy_min),
             xy_sample_far=xy_min + (sample_depth + half_span) * (xy_max - xy_min),
+            # 当前view的相机起点和射线方向向量(世界坐标系下的)
             origins=origins,
             directions=directions,
         )
