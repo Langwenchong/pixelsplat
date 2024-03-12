@@ -176,10 +176,13 @@ class ModelWrapper(LightningModule):
                 (h, w),
             )
 
-        # Save images.
+        # Save images.注意这里都是渲染的图像，包括src视角与target视角
+        # scene是当前要重建的场景id
         (scene,) = batch["scene"]
+        # name是数据集名称
         name = get_cfg()["wandb"]["name"]
         path = self.test_cfg.output_path / name
+        # test时默认batch为1，一次只重建一个场景，index是这个场景不同视角摄像机id
         for index, color in zip(batch["target"]["index"][0], output.color[0]):
             save_image(color, path / scene / f"color/{index:0>6}.png")
 

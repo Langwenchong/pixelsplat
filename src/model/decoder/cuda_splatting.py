@@ -80,7 +80,8 @@ def render_cuda(
     fov_x, fov_y = get_fov(intrinsics).unbind(dim=-1)
     tan_fov_x = (0.5 * fov_x).tan()
     tan_fov_y = (0.5 * fov_y).tan()
-
+    # 类比于MVP变换，这里的projection_matrix负责相机->图像，view负责世界->相机
+    # 但是要注意这里的projection_matrix与openGL有不同，查看具体的函数实现
     projection_matrix = get_projection_matrix(near, far, fov_x, fov_y)
     projection_matrix = rearrange(projection_matrix, "b i j -> b j i")
     view_matrix = rearrange(extrinsics.inverse(), "b i j -> b j i")
@@ -106,14 +107,16 @@ def render_cuda(
             viewmatrix=view_matrix[i],
             projmatrix=full_projection[i],
             sh_degree=degree,
+            # 注意这里只是取出了平移
             campos=extrinsics[i, :3, 3],
             prefiltered=False,  # This matches the original usage.
             debug=False,
         )
         rasterizer = GaussianRasterizer(settings)
-
+        # 这行代码使用 PyTorch 的 triu_indices 函数来生成一个三阶方阵的上三角矩阵的非零元素的
+        # 索引用来查询协方差矩阵，之所以用上三角的就够了是因为协方差矩阵默认是对角阵
         row, col = torch.triu_indices(3, 3)
-
+        # 这里的precomp应该是precompute单独提前预先存储方便计算
         image, radii = rasterizer(
             means3D=gaussian_means[i],
             means2D=mean_gradients,

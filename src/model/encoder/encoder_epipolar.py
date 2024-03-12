@@ -195,7 +195,8 @@ class EncoderEpipolar(Encoder[EncoderEpipolarCfg]):
             if self.cfg.predict_opacity
             else 1
         )
-
+        # 注意目标是从试图恢复一个独立的世界坐标系下的gaussians场，因此这里返还的gaussians
+        # 维度与视图数量无关，同时所有的属性数值都是基于世界坐标的
         return Gaussians(
             # spp - gaussians per pixel
             rearrange(
